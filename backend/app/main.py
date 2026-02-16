@@ -19,7 +19,9 @@ app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://tickora-ai-story-flow.lovable.app"
+        "https://tickora-ai-story-flow.lovable.app",
+        "https://teams.microsoft.com",
+        "https://*.teams.microsoft.com"
     ],
     allow_credentials=True,
     allow_methods=["*"],
