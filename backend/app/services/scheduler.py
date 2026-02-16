@@ -1,12 +1,12 @@
 import logging
-from datetime import datetime, timedelta, time
 import pytz
+from datetime import datetime, time
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
-from app.models.standup import StandupConfig, StandupSession, StandupResponse
-from app.models.project import Project
+from app.models.standup import StandupConfig, StandupSession, SessionStatus
+from app.services.standup_service import standup_service
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -14,67 +14,42 @@ logger = logging.getLogger(__name__)
 scheduler = BackgroundScheduler()
 
 def create_daily_sessions():
-    """Check all configs and create sessions if it's the right time and day."""
+    """Check all active configs and create sessions if it's the right time and day."""
     db: Session = SessionLocal()
     try:
-        now = datetime.utcnow()
-        configs = db.query(StandupConfig).all()
+        configs = db.query(StandupConfig).filter(StandupConfig.is_active == True).all()
         
         for config in configs:
-            # Check if session already exists for today in config's timezone
             tz = pytz.timezone(config.timezone)
             local_now = datetime.now(tz)
-            today_date = local_now.date()
-            
-            # Check if it's a working day
             day_name = local_now.strftime("%a")
-            if day_name not in config.working_days:
+            
+            if day_name not in (config.working_days or []):
                 continue
                 
-            # Check if session exists
-            existing = db.query(StandupSession).filter(
-                StandupSession.config_id == config.id,
-                StandupSession.date == today_date
-            ).first()
-            
-            if existing:
-                continue
-            
-            # Check if current time is >= config time
             config_h, config_m = map(int, config.time.split(':'))
-            if local_now.time() >= time(config_h, config_m):
-                # Create session
-                closes_at = local_now + timedelta(hours=config.response_window_hours)
-                session = StandupSession(
-                    config_id=config.id,
-                    date=today_date,
-                    status="active",
-                    closes_at=closes_at.astimezone(pytz.UTC).replace(tzinfo=None)
-                )
-                db.add(session)
-                logger.info(f"Created standup session for project {config.project_id}")
-        
-        db.commit()
+            # If current local time matches the config time (within the minute)
+            if local_now.hour == config_h and local_now.minute == config_m:
+                standup_service.create_session(db, config.id)
+                
     except Exception as e:
         logger.error(f"Error in create_daily_sessions: {e}")
     finally:
         db.close()
 
 def close_expired_sessions():
-    """Close sessions that have passed their response window."""
+    """Close sessions that have passed their response window and generate summary."""
     db: Session = SessionLocal()
     try:
-        now = datetime.utcnow()
+        now_utc = datetime.utcnow()
         expired = db.query(StandupSession).filter(
-            StandupSession.status == "active",
-            StandupSession.closes_at <= now
+            StandupSession.status == SessionStatus.ACTIVE,
+            StandupSession.ends_at <= now_utc
         ).all()
         
         for session in expired:
-            session.status = "closed"
-            logger.info(f"Closed standup session {session.id}")
+            standup_service.close_session(db, session.id)
             
-        db.commit()
     except Exception as e:
         logger.error(f"Error in close_expired_sessions: {e}")
     finally:
@@ -82,9 +57,9 @@ def close_expired_sessions():
 
 def start_scheduler():
     if not scheduler.running:
-        # Check every 15 minutes
-        scheduler.add_job(create_daily_sessions, CronTrigger(minute="*/15"), id="create_sessions")
-        scheduler.add_job(close_expired_sessions, CronTrigger(minute="*/15"), id="close_sessions")
+        # Runs every minute as requested
+        scheduler.add_job(create_daily_sessions, CronTrigger(second="0"), id="create_sessions")
+        scheduler.add_job(close_expired_sessions, CronTrigger(second="30"), id="close_sessions")
         scheduler.start()
         logger.info("APScheduler started.")
 

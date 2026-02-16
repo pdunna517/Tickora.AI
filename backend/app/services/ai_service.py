@@ -12,4 +12,15 @@ class AIService:
             "tasks": ["Task A", "Task B"]
         }
 
+    
+    def generate_summary(self, prompt: str):
+        # In a real implementation, this would call an LLM API
+        # For now, we simulate a structured response
+        return {
+            "summary_text": f"AI Summary based on responses:\n{prompt[:100]}...",
+            "blockers_json": [
+                {"user": "System", "issue": "Example blocker if applicable"}
+            ]
+        }
+
 ai_service = AIService()

@@ -1,7 +1,12 @@
 from typing import List, Optional, Any
 from uuid import UUID
-from datetime import datetime, date
+from datetime import datetime
 from pydantic import BaseModel, Field
+import enum
+
+class SessionStatus(str, enum.Enum):
+    ACTIVE = "active"
+    CLOSED = "closed"
 
 # Configuration Schemas
 class StandupConfigBase(BaseModel):
@@ -10,6 +15,7 @@ class StandupConfigBase(BaseModel):
     timezone: str = "UTC"
     working_days: List[str] = ["Mon", "Tue", "Wed", "Thu", "Fri"]
     response_window_hours: int = 2
+    is_active: bool = True
     questions: List[str] = ["What did you do yesterday?", "What will you do today?", "Any blockers?"]
 
 class StandupConfigCreate(StandupConfigBase):
@@ -20,6 +26,7 @@ class StandupConfigUpdate(BaseModel):
     timezone: Optional[str] = None
     working_days: Optional[List[str]] = None
     response_window_hours: Optional[int] = None
+    is_active: Optional[bool] = None
     questions: Optional[List[str]] = None
 
 class StandupConfig(StandupConfigBase):
@@ -32,14 +39,15 @@ class StandupConfig(StandupConfigBase):
 
 # Session Schemas
 class StandupSessionBase(BaseModel):
+    project_id: UUID
     config_id: UUID
-    date: date
-    status: str = "active"
+    started_at: datetime
+    ends_at: datetime
+    status: SessionStatus = SessionStatus.ACTIVE
 
 class StandupSession(StandupSessionBase):
     id: UUID
     created_at: datetime
-    closes_at: Optional[datetime]
 
     class Config:
         from_attributes = True
@@ -57,22 +65,20 @@ class StandupResponseCreate(StandupResponseBase):
 class StandupResponse(StandupResponseBase):
     id: UUID
     user_id: UUID
-    config_id: UUID
-    date: date
     created_at: datetime
 
     class Config:
         from_attributes = True
 
 # Summary Schemas
-class StandupSummary(BaseModel):
-    blockers: List[Any] = []
-    in_progress: List[Any] = []
-    completed: List[Any] = []
-    no_response: List[Any] = []
+class StandupSummaryBase(BaseModel):
+    session_id: UUID
+    summary_text: str
+    blockers_json: Optional[Any] = None
 
-class StandupSessionSummary(BaseModel):
+class StandupSummary(StandupSummaryBase):
     id: UUID
-    date: date
-    summary: StandupSummary
-    id_closed: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

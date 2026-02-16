@@ -1,15 +1,16 @@
 from typing import Any, List, Optional
 from uuid import UUID
-from datetime import date, datetime
+from datetime import datetime
 import pytz
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api import deps
-from app.models.standup import StandupConfig, StandupResponse, StandupSummary, StandupSession
+from app.models.standup import StandupConfig, StandupResponse, StandupSummary, StandupSession, SessionStatus
 from app.models.user import User
 from app.schemas import standup as schemas
+from app.services.standup_service import standup_service
 
 router = APIRouter()
 
@@ -21,7 +22,7 @@ def configure_standup(
     current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
-    Configure automated standups for a project.
+    Create or update standup config for a project.
     """
     # Verify timezone
     try:
@@ -29,11 +30,35 @@ def configure_standup(
     except pytz.UnknownTimeZoneError:
         raise HTTPException(status_code=400, detail="Invalid timezone")
 
-    config = StandupConfig(**config_in.dict())
-    db.add(config)
+    config = db.query(StandupConfig).filter(StandupConfig.project_id == config_in.project_id).first()
+    if config:
+        # Update existing
+        for field, value in config_in.dict(exclude_unset=True).items():
+            setattr(config, field, value)
+    else:
+        # Create new
+        config = StandupConfig(**config_in.dict())
+        db.add(config)
+    
     db.commit()
     db.refresh(config)
     return config
+
+@router.get("/active", response_model=Optional[schemas.StandupSession])
+def get_active_session(
+    *,
+    db: Session = Depends(deps.get_db),
+    project_id: UUID = Query(...),
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    Return active session for project.
+    """
+    session = db.query(StandupSession).filter(
+        StandupSession.project_id == project_id,
+        StandupSession.status == SessionStatus.ACTIVE
+    ).first()
+    return session
 
 @router.post("/respond", response_model=schemas.StandupResponse)
 def respond_to_standup(
@@ -43,34 +68,42 @@ def respond_to_standup(
     current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
-    Submit a standup response for an active session.
+    Authenticated users submit standup response.
+    Ensure only one response per user per session (Upsert logic).
     """
     session = db.query(StandupSession).filter(
         StandupSession.id == response_in.session_id,
-        StandupSession.status == "active"
+        StandupSession.status == SessionStatus.ACTIVE
     ).first()
     
     if not session:
         raise HTTPException(status_code=404, detail="Active standup session not found")
 
-    # Check for existing response
-    existing = db.query(StandupResponse).filter(
+    # Check for existing response (Upsert)
+    response = db.query(StandupResponse).filter(
         StandupResponse.session_id == session.id,
         StandupResponse.user_id == current_user.id
     ).first()
     
-    if existing:
-        raise HTTPException(status_code=400, detail="Response already submitted for this session")
-
-    response = StandupResponse(
-        **response_in.dict(),
-        user_id=current_user.id,
-        config_id=session.config_id,
-        date=session.date
-    )
-    db.add(response)
+    if response:
+        # Update
+        response.yesterday = response_in.yesterday
+        response.today = response_in.today
+        response.blockers = response_in.blockers
+    else:
+        # Create
+        response = StandupResponse(
+            **response_in.dict(),
+            user_id=current_user.id
+        )
+        db.add(response)
+    
     db.commit()
     db.refresh(response)
+    
+    # Process for ticket updates (Async-like but synchronous for simplicity here)
+    standup_service.process_response(db, response.id)
+    
     return response
 
 @router.get("/summary/{session_id}", response_model=schemas.StandupSummary)
@@ -80,49 +113,10 @@ def get_standup_summary(
     current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
-    Get categorized summary of a standup session.
+    Return generated summary.
     """
-    session = db.query(StandupSession).filter(StandupSession.id == session_id).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    responses = db.query(StandupResponse).filter(StandupResponse.session_id == session_id).all()
-    
-    # Categorization logic
-    summary = {
-        "blockers": [],
-        "in_progress": [],
-        "completed": [],
-        "no_response": []
-    }
-    
-    responded_user_ids = set()
-    for r in responses:
-        responded_user_ids.add(r.user_id)
-        user_info = {"user_id": r.user_id, "name": "User"} # In real app, join with User model
-        
-        if r.blockers and r.blockers.strip():
-            summary["blockers"].append({**user_info, "content": r.blockers})
-        
-        if r.today and r.today.strip():
-            summary["in_progress"].append({**user_info, "content": r.today})
-            
-        if r.yesterday and r.yesterday.strip():
-            summary["completed"].append({**user_info, "content": r.yesterday})
-
-    # Placeholder: Identify users who haven't responded
-    # In a real app, you'd get all members of the project and diff with responded_user_ids
-    
+    summary = db.query(StandupSummary).filter(StandupSummary.session_id == session_id).first()
+    if not summary:
+        raise HTTPException(status_code=404, detail="Summary not found. It might still be generating or the session is active.")
     return summary
-
-@router.get("/active-sessions", response_model=List[schemas.StandupSession])
-def list_active_sessions(
-    db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user),
-) -> Any:
-    """
-    List currently active standup sessions.
-    """
-    sessions = db.query(StandupSession).filter(StandupSession.status == "active").all()
-    return sessions
 
