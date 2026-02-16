@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.routes import auth, users, projects, sprints, tickets, standups, settings, ai, reports, uploads
+from app.routes import auth, users, projects, sprints, tickets, standups, settings, ai, reports, uploads, project_team
 
 api_router = APIRouter()
 
@@ -11,6 +11,7 @@ def health_check():
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(projects.router, prefix="/projects", tags=["projects"])
+api_router.include_router(project_team.router, prefix="/projects/{project_id}/team", tags=["project-team"])
 api_router.include_router(sprints.router, prefix="/sprints", tags=["sprints"])
 api_router.include_router(tickets.router, prefix="/tickets", tags=["tickets"])
 api_router.include_router(standups.router, prefix="/standups", tags=["standups"])

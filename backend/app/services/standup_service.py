@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from app.models.standup import StandupConfig, StandupSession, StandupResponse, StandupSummary, SessionStatus
-from app.models.project import Ticket, TicketStatus, Project
+from app.models.project import Ticket, TicketStatus, Project, ProjectMember
 from app.services.ai_service import ai_service
 from app.database import SessionLocal
 
@@ -106,10 +106,26 @@ class StandupService:
             prompt += f"  Today: {r.today}\n"
             prompt += f"  Blockers: {r.blockers}\n\n"
 
-        # Identify non-responders (This would need project member lookup)
-        # For now, we'll just note who responded
+        # Identify non-responders based on ProjectMember table
+        project_members = db.query(ProjectMember).filter(ProjectMember.project_id == session.project_id).all()
+        responded_user_ids = {r.user_id for r in responses}
         
+        non_responders = []
+        for pm in project_members:
+            if pm.user_id not in responded_user_ids:
+                user = pm.user
+                non_responders.append(user.full_name or user.email)
+        
+        # Add project owner if not already in list and didn't respond
+        project = db.query(Project).get(session.project_id)
+        if project and project.owner_id not in responded_user_ids:
+            if project.owner_id not in {pm.user_id for pm in project_members}:
+                non_responders.append(project.owner.full_name or project.owner.email)
+
         ai_result = ai_service.generate_summary(prompt)
+        
+        if non_responders:
+            ai_result["summary_text"] += f"\n\n⚠ No Response:\n- " + "\n- ".join(non_responders)
         
         summary = StandupSummary(
             session_id=session_id,

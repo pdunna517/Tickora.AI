@@ -4,6 +4,7 @@ from sqlalchemy.orm import relationship
 import uuid
 from datetime import datetime
 import enum
+from sqlalchemy import Column, String, DateTime, ForeignKey, Text, Integer, Enum, Date, UniqueConstraint
 from app.db.base import Base
 
 class TicketStatus(str, enum.Enum):
@@ -23,6 +24,10 @@ class SprintStatus(str, enum.Enum):
     ACTIVE = "active"
     COMPLETED = "completed"
 
+class ProjectMemberRole(str, enum.Enum):
+    ADMIN = "admin"
+    MEMBER = "member"
+
 class Project(Base):
     __tablename__ = "projects"
 
@@ -35,6 +40,7 @@ class Project(Base):
 
     owner = relationship("User", backref="projects")
     sprints = relationship("Sprint", back_populates="project", cascade="all, delete-orphan")
+    members = relationship("ProjectMember", back_populates="project", cascade="all, delete-orphan")
 
 class Sprint(Base):
     __tablename__ = "sprints"
@@ -67,3 +73,19 @@ class Ticket(Base):
 
     assignee = relationship("User", backref="tickets")
     sprint = relationship("Sprint", back_populates="tickets")
+
+class ProjectMember(Base):
+    __tablename__ = "project_members"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    role = Column(Enum(ProjectMemberRole), default=ProjectMemberRole.MEMBER)
+    joined_at = Column(DateTime, default=datetime.utcnow)
+
+    project = relationship("Project", back_populates="members")
+    user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "user_id", name="uq_project_user"),
+    )
