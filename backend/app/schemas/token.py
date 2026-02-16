@@ -7,3 +7,7 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     sub: Optional[str] = None
+    exp: Optional[int] = None
+
+    class Config:
+        extra = "ignore"
