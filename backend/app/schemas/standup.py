@@ -11,8 +11,8 @@ class SessionStatus(str, enum.Enum):
 # Configuration Schemas
 class StandupConfigBase(BaseModel):
     project_id: UUID
-    time: str = Field(..., pattern=r"^\d{2}:\d{2}$") # HH:MM
-    timezone: str = "UTC"
+    time: str = Field(..., pattern=r"^([01]\d|2[0-3]):([0-5]\d)$", description="Format HH:MM")
+    timezone: Optional[str] = "UTC"
     working_days: List[str] = ["Mon", "Tue", "Wed", "Thu", "Fri"]
     response_window_hours: int = 2
     is_active: bool = True
@@ -22,7 +22,7 @@ class StandupConfigCreate(StandupConfigBase):
     pass
 
 class StandupConfigUpdate(BaseModel):
-    time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
+    time: Optional[str] = Field(None, pattern=r"^([01]\d|2[0-3]):([0-5]\d)$")
     timezone: Optional[str] = None
     working_days: Optional[List[str]] = None
     response_window_hours: Optional[int] = None

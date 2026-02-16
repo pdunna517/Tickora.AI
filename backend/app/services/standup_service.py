@@ -40,7 +40,7 @@ class StandupService:
         db.add(session)
         db.commit()
         db.refresh(session)
-        logger.info(f"Created standup session {session.id} for project {config.project_id}")
+        logger.info(f"Standup session created for project {config.project_id} at time {config.time} (timezone {config.timezone or 'UTC'})")
         return session
 
     def close_session(self, db: Session, session_id: UUID):

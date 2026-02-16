@@ -20,16 +20,22 @@ def create_daily_sessions():
         configs = db.query(StandupConfig).filter(StandupConfig.is_active == True).all()
         
         for config in configs:
-            tz = pytz.timezone(config.timezone)
+            try:
+                tz = pytz.timezone(config.timezone or "UTC")
+            except pytz.UnknownTimeZoneError:
+                logger.warning(f"Invalid timezone {config.timezone} for project {config.project_id}, falling back to UTC")
+                tz = pytz.UTC
+                
             local_now = datetime.now(tz)
             day_name = local_now.strftime("%a")
             
             if day_name not in (config.working_days or []):
                 continue
                 
-            config_h, config_m = map(int, config.time.split(':'))
-            # If current local time matches the config time (within the minute)
-            if local_now.hour == config_h and local_now.minute == config_m:
+            current_time_str = local_now.strftime("%H:%M")
+            
+            # If current local time matches the config time
+            if current_time_str == config.time:
                 standup_service.create_session(db, config.id)
                 
     except Exception as e:
