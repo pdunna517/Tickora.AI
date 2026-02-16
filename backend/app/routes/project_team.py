@@ -113,7 +113,7 @@ def remove_member(
     user_id: UUID,
     db: Session = Depends(deps.get_db),
     admin: User = Depends(get_project_admin)
-) -> Any:
+):
     member = db.query(ProjectMember).filter(
         ProjectMember.project_id == project_id,
         ProjectMember.user_id == user_id
@@ -129,4 +129,3 @@ def remove_member(
         
     db.delete(member)
     db.commit()
-    return None
