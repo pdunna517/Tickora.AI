@@ -32,4 +32,11 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 def root():
-    return {"message": "Welcome to Tickora API"}
+    is_default = settings.SECRET_KEY == "YOUR_SUPER_SECRET_KEY_HERE_CHANGE_IN_PRODUCTION"
+    return {
+        "message": "Welcome to Tickora API",
+        "config_status": {
+            "secret_key_configured": not is_default,
+            "database_configured": bool(settings.SQLALCHEMY_DATABASE_URI)
+        }
+    }
