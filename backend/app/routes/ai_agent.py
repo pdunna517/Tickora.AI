@@ -127,3 +127,38 @@ async def generate_roadmap(
     
     db.commit()
     return generated_phases
+
+@router.post("/stories/{story_id}/import", response_model=Any)
+async def import_story_to_backlog(
+    story_id: UUID,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    from app.models.project import Ticket, TicketStatus, TicketPriority
+    
+    # Load story with epic info
+    story = db.query(UserStory).filter(UserStory.id == story_id).first()
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    # Get project_id from epic
+    project_id = story.epic.project_id
+
+    # Create a new Ticket from the Story
+    ticket = Ticket(
+        title=story.title,
+        description=f"{story.description}\n\n**Acceptance Criteria:**\n- " + "\n- ".join(story.acceptance_criteria) if story.acceptance_criteria else story.description,
+        status=TicketStatus.TODO,
+        priority=TicketPriority.MEDIUM if story.priority.lower() == "medium" else 
+                 TicketPriority.HIGH if story.priority.lower() == "high" else 
+                 TicketPriority.LOW,
+        project_id=project_id,
+        sprint_id=None 
+    )
+    
+    db.add(ticket)
+    story.status = AIStatus.APPROVED
+    db.commit()
+    db.refresh(ticket)
+    
+    return ticket

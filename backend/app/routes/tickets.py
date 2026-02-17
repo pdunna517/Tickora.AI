@@ -14,6 +14,7 @@ router = APIRouter()
 @router.get("", response_model=List[TicketSchema])
 def read_tickets(
     db: Session = Depends(deps.get_db),
+    project_id: Optional[UUID] = None,
     skip: int = 0,
     limit: int = 100,
     current_user: User = Depends(deps.get_current_active_user),
@@ -21,7 +22,11 @@ def read_tickets(
     """
     Retrieve tickets.
     """
-    tickets = db.query(Ticket).offset(skip).limit(limit).all()
+    query = db.query(Ticket)
+    if project_id:
+        query = query.filter(Ticket.project_id == project_id)
+    
+    tickets = query.offset(skip).limit(limit).all()
     return tickets
 
 @router.post("", response_model=TicketSchema)

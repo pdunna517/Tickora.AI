@@ -57,10 +57,12 @@ class TicketBase(BaseModel):
     priority: Optional[TicketPriority] = TicketPriority.MEDIUM
     points: Optional[int] = None
     assignee_id: Optional[UUID4] = None
+    project_id: Optional[UUID4] = None
     sprint_id: Optional[UUID4] = None
 
 class TicketCreate(TicketBase):
     title: str
+    project_id: UUID4
 
 class TicketUpdate(TicketBase):
     pass

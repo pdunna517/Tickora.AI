@@ -16,6 +16,7 @@ from app.models.user import User
 from app.models.project import Project, Sprint, Ticket
 from app.models.standup import StandupConfig, StandupResponse, StandupSummary
 from app.models.settings import Settings
+from app.models.ai_agent import PRDDocument, Epic, UserStory, RoadmapPhase, AIAnalysisLog
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

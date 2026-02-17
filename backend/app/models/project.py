@@ -67,10 +67,12 @@ class Ticket(Base):
     priority = Column(Enum(TicketPriority), default=TicketPriority.MEDIUM)
     points = Column(Integer)
     assignee_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
     sprint_id = Column(UUID(as_uuid=True), ForeignKey("sprints.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    project = relationship("Project")
     assignee = relationship("User", backref="tickets")
     sprint = relationship("Sprint", back_populates="tickets")
 
